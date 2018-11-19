@@ -9,6 +9,8 @@ import com.alipay.api.request.AlipayTradeWapPayRequest;
 import com.gudushidai.mall.config.AlipayConfig;
 import com.gudushidai.mall.config.WeixinPayConfig;
 import com.gudushidai.mall.service.OrderService;
+import com.gudushidai.mall.wechat.PayCommonUtil;
+import com.gudushidai.mall.wechat.WXPayUtil;
 import com.gudushidai.mall.wechat.WeixinService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
@@ -17,10 +19,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import java.io.BufferedReader;
 import java.net.URLEncoder;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
+import java.util.*;
 
 @Controller
 @RequestMapping("/pay")
@@ -207,8 +208,10 @@ public class PayController {
                 System.out.println("===================================="+"TRADE_SUCCESS");
                 //支付成功  将订单状态修改
                 System.out.println("===================================="+"将订单状态修改成未发货状态");
-                orderService.updateStatus(Integer.parseInt(out_trade_no),2);
-
+                int status = orderService.getOrderStatus(out_trade_no);
+                if(status==1){
+                    orderService.updateStatus(Integer.parseInt(out_trade_no),2);
+                }
 
                 //判断该笔订单是否在商户网站中已经做过处理
                 //如果没有做过处理，根据订单号（out_trade_no）在商户网站的订单系统中查到该笔订单的详细，并执行商户的业务程序
@@ -233,10 +236,83 @@ public class PayController {
 
     @RequestMapping("/wxorderPayNotify")
     public String wxorderPayNotify(HttpServletRequest request,HttpServletResponse response) throws Exception {
-        System.out.println("===============receive wx order notify==================");
+        BufferedReader reader = null;
 
+        reader = request.getReader();
+        String line = "";
+        String xmlString = null;
+        StringBuffer inputString = new StringBuffer();
 
-        return "";
+        while ((line = reader.readLine()) != null) {
+            inputString.append(line);
+        }
+        xmlString = inputString.toString();
+        request.getReader().close();
+        System.out.println("----接收到的数据如下：---" + xmlString);
+        Map<String, String> map = new HashMap<String, String>();
+        String result_code = "";
+        String return_code = "";
+        String out_trade_no = "";
+        map = WXPayUtil.xmlToMap(xmlString);
+        result_code = map.get("result_code");
+        out_trade_no = map.get("out_trade_no");
+        return_code = map.get("return_code");
+
+        System.out.println(checkSign(xmlString));
+
+        if (checkSign(xmlString)) {
+            System.out.println("====================================验签成功====================================");
+            //更新数据库
+            int status = orderService.getOrderStatus(out_trade_no);
+            if(status==1){
+                orderService.updateStatus(Integer.parseInt(out_trade_no),2);
+            }
+            return returnXML(result_code);
+        } else {
+            return returnXML("FAIL");
+        }
+    }
+
+    private boolean checkSign(String xmlString) {
+        Map<String, String> map = null;
+        try {
+            map = WXPayUtil.xmlToMap(xmlString);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        String signFromAPIResponse = map.get("sign").toString();
+        if (signFromAPIResponse == "" || signFromAPIResponse == null) {
+            System.out.println("API返回的数据签名数据不存在，有可能被第三方篡改!!!");
+            return false;
+        }
+        System.out.println("服务器回包里面的签名是:" + signFromAPIResponse);
+        //清掉返回数据对象里面的Sign数据（不能把这个数据也加进去进行签名），然后用签名算法进行签名
+        map.put("sign", "");
+        //将API返回的数据根据用签名算法进行计算新的签名，用来跟API返回的签名进行比较
+        String signForAPIResponse = getSign(map);
+        if (!signForAPIResponse.equals(signFromAPIResponse)) {
+            //签名验不过，表示这个API返回的数据有可能已经被篡改了
+            System.out.println("API返回的数据签名验证不通过，有可能被第三方篡改!!! signForAPIResponse生成的签名为" + signForAPIResponse);
+            return false;
+        }
+        System.out.println("恭喜，API返回的数据签名验证通过!!!");
+        return true;
+    }
+
+    public String getSign(Map<String, String> map) {
+        SortedMap<String, String> signParams = new TreeMap<String, String>();
+        for (Map.Entry<String, String> stringStringEntry : map.entrySet()) {
+            signParams.put(stringStringEntry.getKey(), stringStringEntry.getValue());
+        }
+        signParams.remove("sign");
+        String sign = PayCommonUtil.createSign("UTF-8", signParams);
+        return sign;
+    }
+
+    private String returnXML(String return_code) {
+        return "<xml><return_code><![CDATA["
+                + return_code
+                + "]]></return_code><return_msg><![CDATA[OK]]></return_msg></xml>";
     }
 
 }

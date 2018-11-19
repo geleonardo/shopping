@@ -207,4 +207,9 @@ public class OrderServiceImpl implements OrderService {
     public void updateDeliverId(int orderId, String deliverId) {
         orderMapper.updateDeliverId(orderId,deliverId);
     }
+
+    @Override
+    public int getOrderStatus(String out_trade_no) {
+        return orderMapper.getOrderStatus(out_trade_no);
+    }
 }

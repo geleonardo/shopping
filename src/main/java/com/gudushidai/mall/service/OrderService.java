@@ -118,4 +118,6 @@ public interface OrderService {
     List<Order> findAllOrder(int pageindex, int pageSize);
 
     void updateDeliverId(int orderId, String deliverId);
+
+    int getOrderStatus(String out_trade_no);
 }

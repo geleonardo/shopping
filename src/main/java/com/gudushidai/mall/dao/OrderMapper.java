@@ -24,4 +24,7 @@ public interface OrderMapper {
     @Select(" select id,addr,name,order_time as orderTime,phone,state,total,user_id as userId,deliver_id as deliverId,create_at as createAt,update_at as updateAt " +
             " from `order` where user_id =#{userid} and state = #{state} order by id desc limit #{start},#{rows} ")
     List<Order> findByUserIdAndState(@Param("userid") Integer id,@Param("start") int start,@Param("rows") int rows,@Param("state") int state);
+
+    @Select(" select state from `order` where id = #{id} ")
+    int getOrderStatus(@Param("id")String out_trade_no);
 }
